@@ -21,10 +21,45 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # === 追加: SecretとAPI疎通の健全性チェック ===
+      - name: Check ANTHROPIC_API_KEY presence
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "❌ Missing ANTHROPIC_API_KEY secret"
+            exit 1
+          fi
+          echo "✅ ANTHROPIC_API_KEY is present (length: ${#KEY})"
+
+      - name: Sanity-check Anthropic API key (expects 400 if valid)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01")
+          echo "Anthropic API returned HTTP $code"
+          # 有効キーならボディ無しPOSTで 400（Bad Request）になりがち
+          # 401: キー無効/誤り、403: 権限・契約まわり
+          if [ "$code" = "401" ]; then
+            echo "❌ 401 Unauthorized (APIキーが無効/誤りの可能性)"
+            exit 1
+          fi
+          if [ "$code" = "403" ]; then
+            echo "❌ 403 Forbidden (モデル利用権限や請求設定の問題の可能性)"
+            exit 1
+          fi
+          # 200系/400系なら続行（Action本体に委ねる）
+
+      # === ここから従来どおりClaudeを起動 ===
       - name: Run Claude Code
         uses: anthropics/claude-code-action@main
         with:
           trigger_phrase: "@claude"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 必要なら明示モデル指定（権限のあるモデルに変更可）
+          # model: "claude-3-7-sonnet-2025-02-19"
           timeout_minutes: "30"
