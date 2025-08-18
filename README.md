@@ -1,5 +1,7 @@
 # Claude Code Actions Sandbox
 
+[![CI](https://github.com/inotsuyo/ClaudeCodeAction-test/workflows/CI/badge.svg)](https://github.com/inotsuyo/ClaudeCodeAction-test/actions)
+
 ## Node.js + TypeScript セットアップ
 
 このプロジェクトは最小の Node.js + TypeScript 構成を提供します。
