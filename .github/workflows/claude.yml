@@ -6,7 +6,7 @@ permissions:
   issues: write
 
 on:
-  # 手動実行もできるようにしておくとデバッグが楽です
+  # 手動実行できるように残しておくと便利
   workflow_dispatch:
   issue_comment:
     types: [created, edited]
@@ -15,6 +15,7 @@ on:
 
 jobs:
   claude:
+    # コメント本文に @claude が含まれる場合のみ起動
     if: >
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
@@ -25,42 +26,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      # === 健全性チェック（Secret と API 疎通） ===
-      - name: Check ANTHROPIC_API_KEY presence
-        env:
-          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          if [ -z "$KEY" ]; then
-            echo "❌ Missing ANTHROPIC_API_KEY secret"
-            exit 1
-          fi
-          echo "✅ ANTHROPIC_API_KEY is present (length: ${#KEY})"
-
-      - name: Sanity-check Anthropic API key (expects 400 if valid)
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01")
-          echo "Anthropic API returned HTTP $code"
-          # 401: キー無効、403: 権限/契約問題。400系ならキー自体は生きていることが多い。
-          if [ "$code" = "401" ]; then
-            echo "❌ 401 Unauthorized (APIキーが無効/誤りの可能性)"
-            exit 1
-          fi
-          if [ "$code" = "403" ]; then
-            echo "❌ 403 Forbidden (権限/請求設定/モデル許可の可能性)"
-            exit 1
-          fi
-
-      # === Claude Code Action 本体 ===
       - name: Run Claude Code
         uses: anthropics/claude-code-action@main
         with:
           trigger_phrase: "@claude"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # うまく通らない場合は、利用可能なモデルを明示指定
-          # model: "claude-3-7-sonnet"
           timeout_minutes: "30"
+          # 任意の調整項目（必要ならアンコメントして使用）
+          # model: "claude-3-7-sonnet"   # あなたのアカウントで利用可能なモデル名に固定
+          # use_sticky_comment: "true"   # コメントを1つに集約
+          # branch_prefix: "claude/"     # 生成ブランチの接頭辞
+          # label_trigger: "claude"      # ラベルでも起動したい場合
